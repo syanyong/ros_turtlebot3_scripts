@@ -13,6 +13,7 @@ import paramiko
 import socket
 import re
 import time
+import ConfigParser
 
 
 
@@ -26,15 +27,27 @@ def ping(hostname):
         print ("Ping: Destination is Down")
         return False
 
-def send(channel, command=None, live=True, once=False):
+def send(channel, command=None, live=True, once=False, end=None):
     buff = ""
+    _resp = ""
+    start = time.time()
     if command != None:
         channel.send(command + '\n')
     if once:
         return "shutdown"
-    while not buff.endswith(":~$ "):
+    
+    if end is None:
+        end = ":~$ "
+    
+    while not buff.endswith(end):
         resp = channel.recv(9999)
         buff += str(resp)
+        print(">>" + str(buff[-20:]) + "<<")
+
+        # if str(resp) != _resp: # Detect changing
+        #     start = time.time()
+        # _resp = str(resp)
+
         if live:
             print(str(resp) + "\n")
         # print(buff)
@@ -46,15 +59,24 @@ def is_valid_ip(ip):
     return bool(m) and all(map(lambda n: 0 <= int(n) <= 255, m.groups()))
 
 def main():
+    config = ConfigParser.ConfigParser()
+    config.sections()
+    config.read('ipconfig.ini')
+
     print("Python version")
     print (sys.version)
     print("Version info.")
     print (sys.version_info)
 
+    
+
     # cliend_ip = input("Client IP Address: ").strip()
     master_ip = cliend_ip = None
     # cliend_ip = "192.168.10.207"
     # master_ip = "192.168.10.238"
+
+    master_ip = config.get('DEFAULT', 'PC_IP')
+    cliend_ip = config.get('DEFAULT', 'TURTLEBOT_IP')
 
     if len(sys.argv) >= 2:
         if is_valid_ip(sys.argv[1]) and is_valid_ip(sys.argv[2]):
@@ -153,7 +175,12 @@ def main():
                 print(send(channel, command="export ROS_HOSTNAME=%s" % cliend_ip))
                 print(send(channel, command="env | grep \"ROS\""))
                 print(send(channel, command="echo $ROS_MASTER_URI"))
-                print(send(channel, command="roslaunch turtlebot3_bringup turtlebot3_robot.launch"))
+                print(send(channel, command="roslaunch turtlebot3_bringup turtlebot3_robot.launch", 
+                end=": Calibration End\r\n"))
+
+                raw_input("Enter to exit...")
+                print(send(channel, command="\x03", once=True))
+                sys.exit()
             except Exception as e:
                 print('Connection Failed')
                 print(e)
